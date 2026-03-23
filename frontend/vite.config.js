@@ -23,8 +23,8 @@ export default defineConfig({
 			},
 			manifest: {
 				display: "standalone",
-				name: "Frappe HR",
-				short_name: "Frappe HR",
+				name: "HRMS",
+				short_name: "HRMS",
 				start_url: "/hrms",
 				description: "Everyday HR & Payroll operations at your fingertips",
 				theme_color: "#ffffff",
