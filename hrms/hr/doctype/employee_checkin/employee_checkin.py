@@ -29,7 +29,7 @@ class EmployeeCheckin(Document):
 		self.validate_time_change()
 		self.fetch_shift()
 		self.set_geolocation()
-		self.validate_distance_from_shift_location()
+		self.validate_distance_from_shift_location()	
 
 	def validate_duplicate_log(self):
 		doc = frappe.db.exists(
@@ -92,6 +92,9 @@ class EmployeeCheckin(Document):
 
 	def validate_distance_from_shift_location(self):
 		if not frappe.db.get_single_value("HR Settings", "allow_geolocation_tracking"):
+			return
+		
+		if self.device_id:
 			return
 
 		if not (self.latitude or self.longitude):
