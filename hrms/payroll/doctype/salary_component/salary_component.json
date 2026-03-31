@@ -26,6 +26,8 @@
   "do_not_include_in_total",
   "remove_if_zero_valued",
   "disabled",
+  "deducted_before_tax_",
+  "is_relief",
   "section_break_5",
   "accounts",
   "configure_component_tab",
@@ -263,12 +265,25 @@
    "fieldname": "remove_if_zero_valued",
    "fieldtype": "Check",
    "label": "Remove if Zero Valued"
+  },
+  {
+   "default": "0",
+   "description": "Deducted on gross pay before tax calculations?",
+   "fieldname": "deducted_before_tax_",
+   "fieldtype": "Check",
+   "label": "Deducted Before Tax ?"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_relief",
+   "fieldtype": "Check",
+   "label": "is Relief?"
   }
  ],
  "icon": "fa fa-flag",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2024-02-02 13:55:55.989527",
+ "modified": "2026-03-31 16:37:29.877658",
  "modified_by": "Administrator",
  "module": "Payroll",
  "name": "Salary Component",
@@ -292,6 +307,7 @@
    "role": "Employee"
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": []

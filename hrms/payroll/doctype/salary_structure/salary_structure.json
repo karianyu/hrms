@@ -25,8 +25,10 @@
   "hour_rate",
   "earning_deduction",
   "earnings",
+  "gross_deductions",
   "deductions",
   "conditions_and_formula_variable_and_example",
+  "reliefs",
   "net_pay_detail",
   "total_earning",
   "total_deduction",
@@ -236,13 +238,25 @@
    "options": "Currency",
    "reqd": 1,
    "search_index": 1
+  },
+  {
+   "fieldname": "gross_deductions",
+   "fieldtype": "Table",
+   "label": "Gross Deductions",
+   "options": "Salary Detail"
+  },
+  {
+   "fieldname": "reliefs",
+   "fieldtype": "Table",
+   "label": "Reliefs",
+   "options": "Salary Detail"
   }
  ],
  "icon": "fa fa-file-text",
  "idx": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2024-11-22 11:17:28.384386",
+ "modified": "2026-03-31 21:10:13.226556",
  "modified_by": "Administrator",
  "module": "Payroll",
  "name": "Salary Structure",
@@ -280,6 +294,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "show_name_in_global_search": 1,
  "sort_field": "modified",
  "sort_order": "DESC",

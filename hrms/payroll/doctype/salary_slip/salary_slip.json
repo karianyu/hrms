@@ -54,8 +54,10 @@
   "base_hour_rate",
   "earning_deduction_sb",
   "earnings",
+  "gross_deductions",
   "column_break_k1jz",
   "deductions",
+  "reliefs",
   "totals",
   "gross_pay",
   "base_gross_pay",
@@ -64,6 +66,8 @@
   "column_break_25",
   "total_deduction",
   "base_total_deduction",
+  "taxable_income",
+  "total_relief",
   "net_pay_info",
   "net_pay",
   "base_net_pay",
@@ -740,13 +744,35 @@
    "no_copy": 1,
    "print_hide": 1,
    "read_only": 1
+  },
+  {
+   "fieldname": "taxable_income",
+   "fieldtype": "Currency",
+   "label": "Taxable Income"
+  },
+  {
+   "fieldname": "gross_deductions",
+   "fieldtype": "Table",
+   "label": "Gross Deductions",
+   "options": "Salary Detail"
+  },
+  {
+   "fieldname": "reliefs",
+   "fieldtype": "Table",
+   "label": "Reliefs",
+   "options": "Salary Detail"
+  },
+  {
+   "fieldname": "total_relief",
+   "fieldtype": "Currency",
+   "label": "Total Relief"
   }
  ],
  "icon": "fa fa-file-text",
  "idx": 9,
  "is_submittable": 1,
  "links": [],
- "modified": "2024-07-01 21:25:36.651583",
+ "modified": "2026-03-31 21:08:55.866628",
  "modified_by": "Administrator",
  "module": "Payroll",
  "name": "Salary Slip",
@@ -783,6 +809,7 @@
    "role": "Employee"
   }
  ],
+ "row_format": "Dynamic",
  "search_fields": "employee_name",
  "show_name_in_global_search": 1,
  "sort_field": "modified",

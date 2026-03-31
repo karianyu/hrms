@@ -812,6 +812,7 @@ class SalarySlip(TransactionBase):
 				flt(self.gross_pay) * flt(self.exchange_rate), self.precision("base_gross_pay")
 			)
 
+
 		if self.salary_structure:
 			self.calculate_component_amounts("earnings")
 
@@ -828,9 +829,15 @@ class SalarySlip(TransactionBase):
 			)[1]
 
 		set_gross_pay_and_base_gross_pay()
+		self.calculate_component_amounts("gross_deductions")
+		self.calculate_component_amounts("reliefs")
+
+		self.taxable_income = self.gross_pay - self.get_component_totals("gross_deductions")
+		self.total_relief = self.get_component_totals("reliefs")
 
 		if self.salary_structure:
 			self.calculate_component_amounts("deductions")
+
 
 		set_loan_repayment(self)
 
@@ -844,9 +851,9 @@ class SalarySlip(TransactionBase):
 		self.base_total_deduction = flt(
 			flt(self.total_deduction) * flt(self.exchange_rate), self.precision("base_total_deduction")
 		)
-		self.net_pay = flt(self.gross_pay) - (
+		self.net_pay = flt(self.taxable_income) - (
 			flt(self.total_deduction) + flt(self.get("total_loan_repayment"))
-		)
+		) + (flt(self.total_relief))
 		self.rounded_total = rounded(self.net_pay)
 		self.base_net_pay = flt(flt(self.net_pay) * flt(self.exchange_rate), self.precision("base_net_pay"))
 		self.base_rounded_total = flt(rounded(self.base_net_pay), self.precision("base_net_pay"))
@@ -1142,7 +1149,7 @@ class SalarySlip(TransactionBase):
 	def set_salary_structure_doc(self) -> None:
 		self._salary_structure_doc = frappe.get_cached_doc("Salary Structure", self.salary_structure)
 		# sanitize condition and formula fields
-		for table in ("earnings", "deductions"):
+		for table in ("earnings", "deductions","gross_deductions"):
 			for row in self._salary_structure_doc.get(table):
 				row.condition = sanitize_expression(row.condition)
 				row.formula = sanitize_expression(row.formula)
@@ -1152,6 +1159,9 @@ class SalarySlip(TransactionBase):
 
 		for struct_row in self._salary_structure_doc.get(component_type):
 			self.add_structure_component(struct_row, component_type)
+			
+
+		
 
 	def add_structure_component(self, struct_row, component_type):
 		if (
@@ -1232,6 +1242,7 @@ class SalarySlip(TransactionBase):
 		return frappe.cache().get_value(SALARY_COMPONENT_VALUES, generator=_fetch_component_values)
 
 	def eval_condition_and_formula(self, struct_row, data):
+		
 		try:
 			condition, formula, amount = struct_row.condition, struct_row.formula, struct_row.amount
 			if condition and not _safe_eval(condition, self.whitelisted_globals, data):
@@ -1242,6 +1253,7 @@ class SalarySlip(TransactionBase):
 				)
 			if amount:
 				data[struct_row.abbr] = amount
+					
 
 			return amount
 
@@ -1896,12 +1908,15 @@ class SalarySlip(TransactionBase):
 	def get_component_totals(self, component_type, depends_on_payment_days=0):
 		total = 0.0
 		for d in self.get(component_type):
+			# print(d.salary_component, component_type)
+			amount = 0.0
 			if not d.do_not_include_in_total:
 				if depends_on_payment_days:
 					amount = self.get_amount_based_on_payment_days(d)[0]
 				else:
 					amount = flt(d.amount, d.precision("amount"))
 				total += amount
+
 		return total
 
 	def email_salary_slip(self):
