@@ -830,9 +830,10 @@ class SalarySlip(TransactionBase):
 
 		set_gross_pay_and_base_gross_pay()
 		self.calculate_component_amounts("gross_deductions")
-		self.calculate_component_amounts("reliefs")
+		
 
 		self.taxable_income = self.gross_pay - self.get_component_totals("gross_deductions")
+		self.calculate_component_amounts("reliefs")
 		self.total_relief = self.get_component_totals("reliefs")
 
 		if self.salary_structure:
