@@ -1,0 +1,56 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-04-21 00:37:10.859774",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "shift_type",
+  "column_break_tsiu",
+  "min_coverage",
+  "max_coverage"
+ ],
+ "fields": [
+  {
+   "fieldname": "shift_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Shift Type",
+   "options": "Shift Type",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_tsiu",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "min_coverage",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Min Coverage"
+  },
+  {
+   "fieldname": "max_coverage",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Max Coverage"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-04-21 12:39:39.040712",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Shift For Auto Gen",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

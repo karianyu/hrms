@@ -12,6 +12,7 @@
   "shift_assignment_details_section",
   "shift_type",
   "shift_schedule",
+  "shifts_for_auto_generation",
   "shift_location",
   "status",
   "column_break_ybmd",
@@ -204,12 +205,19 @@
    "label": "Shift Schedule",
    "mandatory_depends_on": "eval:doc.action === \"Assign Shift Schedule\"",
    "options": "Shift Schedule"
+  },
+  {
+   "description": "Use this for auto-generation of shifts",
+   "fieldname": "shifts_for_auto_generation",
+   "fieldtype": "Table",
+   "label": "Shifts For Auto Generation",
+   "options": "Shift For Auto Gen"
   }
  ],
  "hide_toolbar": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-01-13 13:48:33.710186",
+ "modified": "2026-04-21 12:39:58.597986",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Shift Assignment Tool",
@@ -225,6 +233,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": []
