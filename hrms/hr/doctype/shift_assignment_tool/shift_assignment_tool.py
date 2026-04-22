@@ -794,8 +794,6 @@ class RosterEngine:
                     min_candidates_with_rot,
                     key=lambda e: self._score_candidate(e, shift_name, cur),
                 )
-                print("Ranked With Rot -- ", ranked_with_rot)
-                print("Self Emps ", self.employees)
                 chosen = ranked_with_rot[:min_needed]
 
                 # If rotation-aware pool is short of the minimum, fill the

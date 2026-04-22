@@ -684,7 +684,7 @@ frappe.ui.form.on("Shift Assignment Tool", {
 		}
 
 		// ── Roster table (first 7 days to keep the dialog compact) ───────────
-		const preview_days = dates.slice(0, 7);
+		const preview_days = dates;
 		html += `<p style="font-size:11px; font-weight:500; color:var(--text-muted); margin:0 0 6px;">
 					${__("Roster preview")}
 					${dates.length > 7 ? `<span style="font-weight:400;">(${__("first 7 days shown")})</span>` : ""}
