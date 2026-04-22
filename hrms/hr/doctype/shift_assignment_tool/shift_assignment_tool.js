@@ -349,9 +349,11 @@ frappe.ui.form.on("Shift Assignment Tool", {
 		// 	min_coverage: r.min_coverage || 1,
 		// }));
 		const default_shift_rows = raw_shifts.map((r) => ({
-			shift_type:   r.shift_type || r,
-			min_coverage: r.min_coverage || 1,
-			max_coverage: r.max_coverage !== undefined ? r.max_coverage : null,
+			shift_type:           r.shift_type || r,
+			min_coverage:         r.min_coverage || 1,
+			max_coverage:         r.max_coverage !== undefined ? r.max_coverage : null,
+			weekend_max_coverage: r.weekend_max_coverage !== undefined ? r.weekend_max_coverage : null,
+			sunday_max_coverage:  r.sunday_max_coverage  !== undefined ? r.sunday_max_coverage  : null,
 		}));
 
 		// ── Build the per-shift coverage table HTML ──────────────────────────
@@ -371,19 +373,27 @@ frappe.ui.form.on("Shift Assignment Tool", {
 					<thead>
 						<tr>
 							<th style="text-align:left; padding:5px 8px; border-bottom:1px solid var(--border-color);
-								font-weight:500; color:var(--text-muted); width:45%;">${__("Shift Type")}</th>
+								font-weight:500; color:var(--text-muted); width:30%;">${__("Shift Type")}</th>
 							<th style="text-align:center; padding:5px 8px; border-bottom:1px solid var(--border-color);
-								font-weight:500; color:var(--text-muted);">${__("Min. Employees / Day")}</th>
+								font-weight:500; color:var(--text-muted);">${__("Min / Day")}<br><span style="font-size:10px; font-weight:400;">(Mon–Fri)</span></th>
+							<th style="text-align:center; padding:5px 8px; border-bottom:1px solid var(--border-color);
+								font-weight:500; color:var(--text-muted);">${__("Max / Day")}<br><span style="font-size:10px; font-weight:400;">(Saturday)</span></th>
+							<th style="text-align:center; padding:5px 8px; border-bottom:1px solid var(--border-color);
+								font-weight:500; color:var(--text-muted);">${__("Max / Day")}<br><span style="font-size:10px; font-weight:400;">(Sunday)</span></th>
 							<th style="text-align:center; padding:5px 8px; border-bottom:1px solid var(--border-color);
 								font-weight:500; color:var(--text-muted);">
-								${__("Max. Employees / Day")}
+								${__("Max / Day")}
 								<br><span style="font-size:10px; font-weight:400; color:var(--text-muted);">(blank = no limit)</span>
 							</th>
 						</tr>
 					</thead>
 					<tbody>`;
-			rows.forEach(({ shift_type, min_coverage, max_coverage = null }) => {
-				const max_val = max_coverage !== null ? max_coverage : "";
+			rows.forEach(({ shift_type, min_coverage, max_coverage = null, weekend_max_coverage = null, sunday_max_coverage = null }) => {
+				const max_val     = max_coverage !== null ? max_coverage : "";
+				const wknd_val    = weekend_max_coverage !== null ? weekend_max_coverage : "";
+				const sun_val     = sunday_max_coverage  !== null ? sunday_max_coverage  : "";
+				const input_style = `width:52px; text-align:center; border:1px solid var(--border-color);
+						border-radius:4px; padding:2px 6px; background:var(--control-bg);`;
 				html += `
 					<tr data-shift="${frappe.utils.escape_html(shift_type)}">
 						<td style="padding:6px 8px; border-bottom:1px solid var(--border-color);">
@@ -392,15 +402,25 @@ frappe.ui.form.on("Shift Assignment Tool", {
 						<td style="padding:6px 8px; border-bottom:1px solid var(--border-color); text-align:center;">
 							<input type="number" min="1" value="${min_coverage}"
 								data-shift="${frappe.utils.escape_html(shift_type)}" data-type="min"
-								style="width:64px; text-align:center; border:1px solid var(--border-color);
-									border-radius:4px; padding:2px 6px; background:var(--control-bg);" />
+								style="${input_style}" />
+						</td>
+						<td style="padding:6px 8px; border-bottom:1px solid var(--border-color); text-align:center;">
+							<input type="number" min="0" value="${wknd_val}"
+								data-shift="${frappe.utils.escape_html(shift_type)}" data-type="weekend_max"
+								placeholder="same"
+								style="${input_style}" />
+						</td>
+						<td style="padding:6px 8px; border-bottom:1px solid var(--border-color); text-align:center;">
+							<input type="number" min="0" value="${sun_val}"
+								data-shift="${frappe.utils.escape_html(shift_type)}" data-type="sunday_max"
+								placeholder="same"
+								style="${input_style}" />
 						</td>
 						<td style="padding:6px 8px; border-bottom:1px solid var(--border-color); text-align:center;">
 							<input type="number" min="0" value="${max_val}"
 								data-shift="${frappe.utils.escape_html(shift_type)}" data-type="max"
 								placeholder="unlimited"
-								style="width:64px; text-align:center; border:1px solid var(--border-color);
-									border-radius:4px; padding:2px 6px; background:var(--control-bg);" />
+								style="${input_style}" />
 						</td>
 					</tr>`;
 			});
@@ -412,15 +432,24 @@ frappe.ui.form.on("Shift Assignment Tool", {
 		const _read_shift_rows = (dialog) => {
 			const rows = [];
 			dialog.$wrapper.find("#shift-coverage-table tbody tr").each(function () {
-				const shift_type   = $(this).data("shift");
-				const min_input    = $(this).find("input[data-type='min']");
-				const max_input    = $(this).find("input[data-type='max']");
+				const shift_type    = $(this).data("shift");
+				const min_input     = $(this).find("input[data-type='min']");
+				const wknd_input    = $(this).find("input[data-type='weekend_max']");
+				const sun_input     = $(this).find("input[data-type='sunday_max']");
+				const max_input     = $(this).find("input[data-type='max']");
 
-				const min_coverage = parseInt(min_input.val(), 10) || 1;
-				let   max_coverage = parseInt(max_input.val(), 10);
+				const min_coverage  = parseInt(min_input.val(), 10) || 1;
+
+				let weekend_max = parseInt(wknd_input.val(), 10);
+				if (isNaN(weekend_max) || weekend_max < 0) weekend_max = null;
+
+				let sunday_max  = parseInt(sun_input.val(), 10);
+				if (isNaN(sunday_max)  || sunday_max  < 0) sunday_max  = null;
+
+				let max_coverage = parseInt(max_input.val(), 10);
 				if (isNaN(max_coverage) || max_coverage <= 0) max_coverage = null;
 
-				if (shift_type) rows.push({ shift_type, min_coverage, max_coverage });
+				if (shift_type) rows.push({ shift_type, min_coverage, weekend_max_coverage: weekend_max, sunday_max_coverage: sunday_max, max_coverage });
 			});
 			return rows;
 		};
@@ -531,7 +560,7 @@ frappe.ui.form.on("Shift Assignment Tool", {
 		// Resolve an employee ID to a human-readable label.
 		// Falls back to the raw ID if not found in the map.
 		const resolveName = (id) => nameMap[id] || id;
-		const { roster, workload, uncovered, skipped_leave, forced_rest = {}, rest_blocked = {}, hours_capped = {}, rotation_block = {}, shift_types: shiftMeta = [], rotation_cycle = [], min_coverage: coverageMap = {} } = result;
+		const { roster, workload, uncovered, skipped_leave, forced_rest = {}, rest_blocked = {}, hours_capped = {}, rotation_block = {}, shift_types: shiftMeta = [], rotation_cycle = [], min_coverage: coverageMap = {}, weekend_max_coverage: weekendMap = {}, sunday_max_coverage: sundayMap = {} } = result;
 		const dates = Object.keys(roster).sort();
 		const shift_types = dates.length
 			? Object.keys(roster[dates[0]])
@@ -564,9 +593,16 @@ frappe.ui.form.on("Shift Assignment Tool", {
 				const overnight = is_overnight ? ` <span style="font-size:10px; opacity:.7;">${__("overnight")}</span>` : "";
 				const pos       = cyclePos[shift_type];
 				const posLabel  = pos ? `<span style="font-size:10px; color:var(--primary); margin-left:3px;">⟳${pos}/${totalInCycle}</span>` : "";
-				const minLabel  = coverageMap[shift_type]
-					? `<span style="font-size:10px; color:var(--text-muted); margin-left:4px;">min ${coverageMap[shift_type]}</span>`
-					: "";
+			const minLabel = coverageMap[shift_type]
+				? (() => {
+					const wknd = weekendMap[shift_type];
+					const sun  = sundayMap[shift_type];
+					let extra = "";
+					if (wknd != null) extra += ` <span style="font-size:10px; color:var(--text-muted);">Sat max:${wknd}</span>`;
+					if (sun  != null) extra += ` <span style="font-size:10px; color:var(--text-muted);">Sun:${sun}</span>`;
+					return `<span style="font-size:10px; color:var(--text-muted); margin-left:4px;">min ${coverageMap[shift_type]}${extra}</span>`;
+				})()
+				: "";
 				html += `<span style="display:inline-flex; align-items:center; gap:5px; font-size:11px;
 							background:var(--control-bg); border:0.5px solid var(--border-color);
 							border-radius:4px; padding:3px 8px;">

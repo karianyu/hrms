@@ -191,6 +191,8 @@ class RosterEngine:
         company: str,
         min_coverage: Optional[dict[str, int]] = None,
         max_coverage: Optional[dict[str, Optional[int]]] = None,
+        weekend_max_coverage: Optional[dict[str, int]] = None,
+        sunday_max_coverage: Optional[dict[str, int]] = None,
         allow_multiple_shifts: bool = False,
         max_streak_days: int = MAX_STREAK_DAYS,
         target_days_per_week: int = TARGET_DAYS_PER_WEEK,
@@ -206,6 +208,12 @@ class RosterEngine:
         self.company               = company
         self.min_coverage          = min_coverage or {s: 1 for s in shift_types}
         self.max_coverage          = max_coverage or {}
+        # weekend_max_coverage: caps the number of employees per shift on Saturdays
+        #   (and Sundays when no sunday_max_coverage is set).
+        # sunday_max_coverage: further cap on Sundays specifically.
+        #   Falls back to weekend_max_coverage, then max_coverage (which may be None = unlimited).
+        self.weekend_max_coverage  = weekend_max_coverage or {}
+        self.sunday_max_coverage   = sunday_max_coverage  or {}
         self.allow_multiple_shifts = allow_multiple_shifts
         self.max_streak_days       = max_streak_days
         self.target_days_per_week  = target_days_per_week
@@ -333,6 +341,30 @@ class RosterEngine:
         the one relevant to the rest-gap check for the following day.
         """
         return sorted(self.shift_types, key=lambda s: self._profiles[s].start_h)
+
+    def _effective_max_coverage(self, shift_name: str, day: date) -> Optional[int]:
+        """
+        Return the maximum headcount cap for ``shift_name`` on ``day``,
+        applying weekend/Sunday overrides when set.
+
+        Priority (highest → lowest):
+          1. sunday_max_coverage   — Sundays only  (weekday() == 6)
+          2. weekend_max_coverage  — Saturday or Sunday (weekday() >= 5)
+          3. max_coverage          — all other days (may be None = no cap)
+
+        A shift absent from an override dict falls through to the next level,
+        so you only need to configure the shifts whose caps actually change.
+        """
+        dow = day.weekday()   # Monday=0 … Sunday=6
+        if dow == 6:          # Sunday
+            if shift_name in self.sunday_max_coverage:
+                return self.sunday_max_coverage[shift_name]
+            if shift_name in self.weekend_max_coverage:
+                return self.weekend_max_coverage[shift_name]
+        elif dow == 5:        # Saturday
+            if shift_name in self.weekend_max_coverage:
+                return self.weekend_max_coverage[shift_name]
+        return self.max_coverage.get(shift_name)
     
     
 
@@ -775,7 +807,7 @@ class RosterEngine:
             for shift_name in ordered_shifts:
                 profile     = self._profiles[shift_name]
                 min_needed  = self.min_coverage.get(shift_name, 1)
-                max_allowed = self.max_coverage.get(shift_name)
+                max_allowed = self._effective_max_coverage(shift_name, cur)
 
                 if max_allowed is not None:
                     min_needed = min(min_needed, max_allowed)
@@ -1189,8 +1221,9 @@ class ShiftAssignmentTool(Document):
 
         parsed_shift_names:  list[str] = []
         parsed_min_coverage: dict[str, int] = {}
-        parsed_min_coverage: dict[str, int] = {}
         parsed_max_coverage: dict[str, Optional[int]] = {}
+        parsed_weekend_max:  dict[str, int] = {}
+        parsed_sunday_max:   dict[str, int] = {}
 
         for entry in shift_types or []:
             if isinstance(entry, dict):
@@ -1201,6 +1234,14 @@ class ShiftAssignmentTool(Document):
                 parsed_min_coverage[name] = int(entry.get("min_coverage", 1))
                 max_c = entry.get("max_coverage")
                 parsed_max_coverage[name] = int(max_c) if max_c is not None else None
+                # Weekend (Saturday) max cap — limits staff on slower business days
+                wknd = entry.get("weekend_max_coverage")
+                if wknd is not None:
+                    parsed_weekend_max[name] = int(wknd)
+                # Sunday max cap — further reduces the ceiling on Sundays
+                sun = entry.get("sunday_max_coverage")
+                if sun is not None:
+                    parsed_sunday_max[name] = int(sun)
             elif isinstance(entry, str):
                 parsed_shift_names.append(entry)
                 parsed_min_coverage[entry] = (min_coverage or {}).get(entry, 1)
@@ -1235,6 +1276,8 @@ class ShiftAssignmentTool(Document):
             company=self.company,
             min_coverage=parsed_min_coverage,
             max_coverage=parsed_max_coverage,
+            weekend_max_coverage=parsed_weekend_max,
+            sunday_max_coverage=parsed_sunday_max,
             allow_multiple_shifts=bool(allow_multiple_shifts),
             rotation_cycle=shift_names,
         )
@@ -1277,6 +1320,8 @@ class ShiftAssignmentTool(Document):
             "shift_types":          engine.shift_type_summary(),
             "rotation_cycle":       engine.rotation_cycle,
             "min_coverage":         parsed_min_coverage,
+            "weekend_max_coverage": parsed_weekend_max,
+            "sunday_max_coverage":  parsed_sunday_max,
             "uncovered":            uncovered,
             "skipped_leave":        skipped_leave,
             "forced_rest":          forced_rest,
