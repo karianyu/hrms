@@ -224,6 +224,7 @@ def bulk_shift_monthly_fetch():
 						current_shift = frappe.get_doc("Shift Assignment", shift_assignment['name'])
 						current_shift.status = "Inactive"
 						current_shift.save()
+						frappe.db.commit()
 		
 			new_shift = frappe.get_doc({
 				"doctype": "Shift Assignment",
