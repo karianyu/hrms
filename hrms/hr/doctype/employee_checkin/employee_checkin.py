@@ -196,6 +196,99 @@ def bulk_fetch_shift(checkins: list[str] | str) -> None:
 		doc.flags.ignore_validate = True
 		doc.save()
 
+@frappe.whitelist()
+def bulk_shift_monthly_fetch():
+	from zkteco_biometric_integration.zkteco_biometric_integration.api.transactions_sync import handle_employee_checkin
+	# get_checkins = handle_employee_checkin(start_time = first_day_of_current_month())
+
+	# get all checkins for this month
+	monthly_checkins = frappe.db.get_list("Employee Checkin",
+									  filters=[[
+									'time', 'between', [first_day_of_current_month(), datetime.now()]
+								]], fields = ["name","employee","time","log_type","shift"])
+	for monthly_checkin in monthly_checkins:
+		shift = get_actual_shift(monthly_checkin)
+		if shift == monthly_checkin['shift']:
+			pass
+		else:
+			# get shiftassignment is any for this day
+			shift_assignments = frappe.db.get_list("Shift Assignment",
+									  filters=[
+										  ['start_date', '>=', monthly_checkin['time']],
+										  ['end_date', '<=', monthly_checkin['time']],
+										  ["employee",monthly_checkin['employee']]
+								], fields = ["name","shift_type","status","docstatus"])
+			if len(shift_assignments) > 0:
+				for shift_assignment in shift_assignments:
+					if shift_assignment['status'] == "Active" and shift_assignment['docstatus'] != 2:
+						current_shift = frappe.get_doc("Shift Assignment", shift_assignment['name'])
+						current_shift.status = "Inactive"
+						current_shift.save()
+		
+			new_shift = frappe.get_doc({
+				"doctype": "Shift Assignment",
+				"employee": monthly_checkin['employee'],
+				"start_date": monthly_checkin['time'],
+				"end_date": monthly_checkin['time'],
+				"shift_type": shift
+			})
+			new_shift.save()
+			new_shift.submit()
+
+			get_checkin = frappe.get_doc("Employee Checkin", monthly_checkin['name'])
+			get_checkin.fetch_shift()
+			get_checkin.flags.ignore_validate = True
+			get_checkin.save()
+
+
+from datetime import datetime
+from typing import Dict, Any
+
+def get_actual_shift(log_entry: Dict[str, Any]) -> str:
+    """
+    Determines the actual shift based on the log entry.
+    
+    Rules:
+    - If log_type is 'IN' and time is after midday (12:00:00), return "Night Shift"
+    - Otherwise, return "Day Shift"
+    
+    Args:
+        log_entry (dict): Dictionary containing 'time', 'log_type', and 'shift'
+    
+    Returns:
+        str: "Day Shift" or "Night Shift"
+    """
+    # Extract required fields
+    log_time: datetime = log_entry.get('time')
+    log_type: str = log_entry.get('log_type', '')
+    
+    if log_time is None:
+        raise ValueError("Missing 'time' in log entry")
+    
+    # Main logic
+    if log_type.upper() == 'IN':
+        # Check if time is after midday (12:00:00)
+        midday = log_time.replace(hour=12, minute=0, second=0, microsecond=0)
+        
+        if log_time >= midday:
+            return "Night Shift"
+    
+    # Default case
+    return "Day Shift"
+
+
+
+def first_day_of_current_month() -> datetime:
+    """
+    Returns the first day of the current month as a datetime object (at 00:00:00).
+    
+    Returns:
+        datetime: First day of the current month
+    """
+    today = datetime.now()
+    first_day = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return first_day
+
 
 def mark_attendance_and_link_log(
 	logs,
