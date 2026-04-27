@@ -236,8 +236,12 @@ def bulk_shift_monthly_fetch():
 				"end_date": monthly_checkin['time'],
 				"shift_type": shift
 			})
-			new_shift.save()
-			new_shift.submit()
+			try:
+				new_shift.save()
+				new_shift.submit()
+			except Exception as e:
+				frappe.log_error(frappe.get_traceback(), e)
+				pass
 
 			get_checkin = frappe.get_doc("Employee Checkin", monthly_checkin['name'])
 			get_checkin.fetch_shift()
