@@ -199,7 +199,7 @@ def bulk_fetch_shift(checkins: list[str] | str) -> None:
 @frappe.whitelist()
 def bulk_shift_monthly_fetch():
 	from zkteco_biometric_integration.zkteco_biometric_integration.api.transactions_sync import handle_employee_checkin
-	# get_checkins = handle_employee_checkin(start_time = first_day_of_current_month())
+	get_checkins = handle_employee_checkin(start_time = first_day_of_current_month())
 
 	# get all checkins for this month
 	monthly_checkins = frappe.db.get_list("Employee Checkin",
@@ -209,16 +209,19 @@ def bulk_shift_monthly_fetch():
 	for monthly_checkin in monthly_checkins:
 		shift = get_actual_shift(monthly_checkin)
 		if shift == monthly_checkin['shift']:
+			print("True ", monthly_checkin['employee'], monthly_checkin['time'])
 			pass
 		else:
+			print("False ", monthly_checkin['employee'], monthly_checkin['time'])
 			# get shiftassignment is any for this day
 			shift_assignments = frappe.db.get_list("Shift Assignment",
 									  filters=[
 										  ['start_date', '>=', monthly_checkin['time']],
-										  ['end_date', '<=', monthly_checkin['time']],
+										  ['end_date', '>=', monthly_checkin['time']],
 										  ["employee",monthly_checkin['employee']]
 								], fields = ["name","shift_type","status","docstatus"])
 			if len(shift_assignments) > 0:
+				print("LIST ", shift_assignments)
 				for shift_assignment in shift_assignments:
 					if shift_assignment['status'] == "Active" and shift_assignment['docstatus'] != 2:
 						current_shift = frappe.get_doc("Shift Assignment", shift_assignment['name'])
