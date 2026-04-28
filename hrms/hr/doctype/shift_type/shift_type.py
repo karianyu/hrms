@@ -125,17 +125,21 @@ class ShiftType(Document):
 				out_time,
 			) = self.get_attendance(single_shift_logs)
 
-			mark_attendance_and_link_log(
-				single_shift_logs,
-				attendance_status,
-				attendance_date,
-				working_hours,
-				late_entry,
-				early_exit,
-				in_time,
-				out_time,
-				self.name,
-			)
+			try:
+
+				mark_attendance_and_link_log(
+					single_shift_logs,
+					attendance_status,
+					attendance_date,
+					working_hours,
+					late_entry,
+					early_exit,
+					in_time,
+					out_time,
+					self.name,
+				)
+			except Exception as e:
+				pass
 
 		# commit after processing checkin logs to avoid losing progress
 		frappe.db.commit()  # nosemgrep
@@ -145,7 +149,7 @@ class ShiftType(Document):
 		# right from "Process Attendance After" to "Last Sync of Checkin"
 		for batch in create_batch(assigned_employees, EMPLOYEE_CHUNK_SIZE):
 			for employee in batch:
-				self.mark_absent_for_dates_with_no_attendance(employee)
+				# self.mark_absent_for_dates_with_no_attendance(employee)
 				self.mark_absent_for_half_day_dates(employee)
 
 			frappe.db.commit()  # nosemgrep
@@ -413,5 +417,9 @@ def process_auto_attendance_for_all_shifts():
 	shift_list = frappe.get_all("Shift Type", filters={"enable_auto_attendance": "1"}, pluck="name")
 	for shift in shift_list:
 		doc = frappe.get_cached_doc("Shift Type", shift)
-		doc.process_auto_attendance()
+		try:
+			doc.process_auto_attendance()
+		except Exception as e:
+			frappe.log_error(frappe.get_traceback(), e)
+			pass
 
