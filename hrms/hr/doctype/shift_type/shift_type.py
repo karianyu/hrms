@@ -411,7 +411,7 @@ def get_actual_shift_end(shift, current_datetime):
 		actual_shift_end = add_days(actual_shift_end, -1)
 	return actual_shift_end
 
-
+@frappe.whitelist()
 def process_auto_attendance_for_all_shifts():
 	"""Called from hooks"""
 	shift_list = frappe.get_all("Shift Type", filters={"enable_auto_attendance": "1"}, pluck="name")
