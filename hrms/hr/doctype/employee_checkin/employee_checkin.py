@@ -196,107 +196,124 @@ def bulk_fetch_shift(checkins: list[str] | str) -> None:
 		doc.flags.ignore_validate = True
 		doc.save()
 
-@frappe.whitelist()
-def bulk_shift_monthly_fetch():
-	from zkteco_biometric_integration.zkteco_biometric_integration.api.transactions_sync import handle_employee_checkin
-	get_checkins = handle_employee_checkin(start_time = first_day_of_current_month())
 
-	# get all checkins for this month
-	monthly_checkins = frappe.db.get_list("Employee Checkin",
-									  filters=[[
-									'time', 'between', [first_day_of_current_month(), datetime.now()]
-								]], fields = ["name","employee","time","log_type","shift"])
-	for monthly_checkin in monthly_checkins:
-		shift = get_actual_shift(monthly_checkin)
-		if shift == monthly_checkin['shift']:
-			print("True ", monthly_checkin['employee'], monthly_checkin['time'])
-			pass
-		else:
-			print("False ", monthly_checkin['employee'], monthly_checkin['time'])
-			# get shiftassignment is any for this day
-			shift_assignments = frappe.db.get_list("Shift Assignment",
-									  filters=[
-										  ['start_date', '>=', monthly_checkin['time']],
-										  ['end_date', '>=', monthly_checkin['time']],
-										  ["employee",monthly_checkin['employee']]
-								], fields = ["name","shift_type","status","docstatus"])
-			if len(shift_assignments) > 0:
-				print("LIST ", shift_assignments)
-				for shift_assignment in shift_assignments:
-					if shift_assignment['status'] == "Active" and shift_assignment['docstatus'] != 2:
-						current_shift = frappe.get_doc("Shift Assignment", shift_assignment['name'])
-						current_shift.status = "Inactive"
-						current_shift.save()
-						frappe.db.commit()
-		
-			new_shift = frappe.get_doc({
-				"doctype": "Shift Assignment",
-				"employee": monthly_checkin['employee'],
-				"start_date": monthly_checkin['time'],
-				"end_date": monthly_checkin['time'],
-				"shift_type": shift
-			})
-			try:
-				new_shift.save()
-				new_shift.submit()
-			except Exception as e:
-				frappe.log_error(frappe.get_traceback(), e)
-				pass
-
-			get_checkin = frappe.get_doc("Employee Checkin", monthly_checkin['name'])
-			get_checkin.fetch_shift()
-			get_checkin.flags.ignore_validate = True
-			get_checkin.save()
-
-
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any
+
+
+@frappe.whitelist()
+def bulk_shift_monthly_fetch(checkins: list[str] | str):
+	# from zkteco_biometric_integration.zkteco_biometric_integration.api.transactions_sync import handle_employee_checkin
+	# get_checkins = handle_employee_checkin(start_time=first_day_of_current_month())
+
+	if isinstance(checkins, str):
+		checkins = frappe.json.loads(checkins)
+
+	for monthly_checkin_ in checkins:
+		monthly_checkin = frappe.get_doc("Employee Checkin", monthly_checkin_)
+		checkin_data = monthly_checkin.as_dict()
+		actual_shift = get_actual_shift(checkin_data)
+
+		# Determine the date range for this shift assignment
+		# Night shifts span two days: start = checkin day, end = next day
+		checkin_time: datetime = checkin_data.get("time")
+		is_night_shift = actual_shift == "Night Shift"
+
+		shift_start_date = checkin_time.date()
+		shift_end_date = (checkin_time + timedelta(days=1)).date() if is_night_shift else checkin_time.date()
+
+		if actual_shift == checkin_data.get("shift"):
+			print("Actual Shift ", actual_shift)
+			# Shift is already correctly assigned — nothing to do
+			continue
+		# Find existing shift assignments that overlap with the check-in date
+		# A shift assignment covers this checkin if start_date <= checkin_date <= end_date
+		checkin_date_str = str(shift_start_date)
+		shift_assignments = frappe.db.get_list(
+			"Shift Assignment",
+			filters=[
+				["start_date", "<=", checkin_date_str],
+				["end_date", ">=", checkin_date_str],
+				["employee", "=", checkin_data["employee"]],
+				["docstatus", "!=", 2],  # Exclude already-cancelled
+			],
+			fields=["name", "shift_type", "status", "docstatus"],
+		)
+
+		# Cancel any active assignments for this day
+		for shift_assignment in shift_assignments:
+			if shift_assignment["status"] == "Active":
+				current_shift = frappe.get_doc("Shift Assignment", shift_assignment["name"])
+				current_shift.status = "Inactive"
+				# current_shift.cancel()  # Use cancel() to properly set docstatus=2
+				frappe.db.commit()
+
+		# Create new shift assignment with correct date range
+		new_shift = frappe.get_doc({
+			"doctype": "Shift Assignment",
+			"employee": checkin_data["employee"],
+			"start_date": str(shift_start_date),
+			"end_date": str(shift_end_date),   # Next day for night shifts
+			"shift_type": actual_shift,
+			"status": "Active",
+		})
+
+		try:
+			new_shift.insert()
+			new_shift.submit()
+			frappe.db.commit()
+		except Exception as e:
+			frappe.log_error(frappe.get_traceback(), str(e))
+			pass  # Skip re-fetching shift if assignment failed
+
+		# Re-fetch the shift on the checkin record now that assignment is corrected
+		get_checkin = frappe.get_doc("Employee Checkin", checkin_data["name"])
+		get_checkin.fetch_shift()
+		get_checkin.flags.ignore_validate = True
+		get_checkin.save()
+		frappe.db.commit()
+
 
 def get_actual_shift(log_entry: Dict[str, Any]) -> str:
     """
-    Determines the actual shift based on the log entry.
-    
+    Determines the actual shift based on the log entry time and type.
+
     Rules:
-    - If log_type is 'IN' and time is after midday (12:00:00), return "Night Shift"
-    - Otherwise, return "Day Shift"
-    
+    - IN  after 12:00 → Night Shift (shift starts evening, ends next morning)
+    - OUT before 12:00 → Night Shift (this is the morning-end of a night shift)
+    - Everything else  → Day Shift
+
     Args:
         log_entry (dict): Dictionary containing 'time', 'log_type', and 'shift'
-    
+
     Returns:
         str: "Day Shift" or "Night Shift"
     """
-    # Extract required fields
-    log_time: datetime = log_entry.get('time')
-    log_type: str = log_entry.get('log_type', '')
-    
+    log_time: datetime = log_entry.get("time")
+    log_type: str = log_entry.get("log_type", "").upper()
+
     if log_time is None:
         raise ValueError("Missing 'time' in log entry")
-    
-    # Main logic
-    if log_type.upper() == 'IN':
-        # Check if time is after midday (12:00:00)
-        midday = log_time.replace(hour=12, minute=0, second=0, microsecond=0)
-        
-        if log_time >= midday:
-            return "Night Shift"
-    
-    # Default case
-    return "Day Shift"
 
+    midday = log_time.replace(hour=12, minute=0, second=0, microsecond=0)
+
+    if log_type == "IN" and log_time >= midday:
+        # Employee clocking in after noon → Night Shift
+        return "Night Shift"
+
+    if log_type == "OUT" and log_time < midday:
+        # Employee clocking out before noon → end of a Night Shift
+        return "Night Shift"
+
+    return "Day Shift"
 
 
 def first_day_of_current_month() -> datetime:
     """
     Returns the first day of the current month as a datetime object (at 00:00:00).
-    
-    Returns:
-        datetime: First day of the current month
     """
     today = datetime.now()
-    first_day = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    return first_day
-
+    return today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 def mark_attendance_and_link_log(
 	logs,

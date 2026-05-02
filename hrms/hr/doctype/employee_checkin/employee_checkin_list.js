@@ -18,9 +18,13 @@ frappe.listview_settings["Employee Checkin"] = {
 		});
 
 		listview.page.add_action_item(__("Fetch Shifts - All"), () => {
+			const checkins = listview.get_checked_items().map((checkin) => checkin.name);
 			frappe.call({
 				method: "hrms.hr.doctype.employee_checkin.employee_checkin.bulk_shift_monthly_fetch",
 				freeze: true,
+				args: {
+					checkins,
+				},
 			});
 		});
 	},
