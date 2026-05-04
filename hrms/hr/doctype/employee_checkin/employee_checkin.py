@@ -343,7 +343,7 @@ def create_draft_attendance_for_offshift_checkins(checkins: list[str] | str | No
 
 	checkin_records = frappe.get_all(
 		"Employee Checkin",
-		filters=filters,
+		# filters=filters,
 		fields=["name", "employee", "employee_name", "time", "log_type"],
 		order_by="employee, time asc",
 	)
