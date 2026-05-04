@@ -223,7 +223,6 @@ def bulk_shift_monthly_fetch(checkins: list[str] | str):
 		shift_end_date = (checkin_time + timedelta(days=1)).date() if is_night_shift else checkin_time.date()
 
 		if actual_shift == checkin_data.get("shift"):
-			print("Actual Shift ", actual_shift)
 			# Shift is already correctly assigned — nothing to do
 			continue
 		# Find existing shift assignments that overlap with the check-in date
@@ -314,6 +313,160 @@ def first_day_of_current_month() -> datetime:
     """
     today = datetime.now()
     return today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+@frappe.whitelist()
+def create_draft_attendance_for_offshift_checkins(checkins: list[str] | str | None = None) -> dict:
+	"""
+	For all Employee Checkin records where Off-shift == Yes (offshift=1) and no attendance
+	is linked yet, group the checkins by employee + date, calculate working hours, and
+	create a DRAFT Attendance record (status=Present, docstatus=0) for each group.
+	The user must review and manually submit each attendance record.
+
+	:param checkins: (optional) List of specific Employee Checkin names to process.
+	                 If omitted, all unprocessed off-shift checkins are considered.
+	:returns: dict with keys 'created', 'skipped', and 'errors' — each a list of detail dicts.
+	"""
+	if isinstance(checkins, str):
+		checkins = frappe.json.loads(checkins)
+
+	# ------------------------------------------------------------------ #
+	# 1. Fetch candidate checkin records                                   #
+	# ------------------------------------------------------------------ #
+	filters = {
+		"offshift": 1,
+		"attendance": ("is", "not set"),
+		"skip_auto_attendance": 0,
+	}
+	if checkins:
+		filters["name"] = ("in", checkins)
+
+	checkin_records = frappe.get_all(
+		"Employee Checkin",
+		filters=filters,
+		fields=["name", "employee", "employee_name", "time", "log_type"],
+		order_by="employee, time asc",
+	)
+
+	if not checkin_records:
+		return {"created": [], "skipped": [], "errors": []}
+
+	# ------------------------------------------------------------------ #
+	# 2. Group by (employee, date)                                        #
+	# ------------------------------------------------------------------ #
+	from collections import defaultdict
+
+	groups: dict[tuple, list] = defaultdict(list)
+	for record in checkin_records:
+		checkin_date = get_datetime(record["time"]).date()
+		groups[(record["employee"], checkin_date)].append(record)
+
+	created = []
+	skipped = []
+	errors = []
+
+	# ------------------------------------------------------------------ #
+	# 3. Process each group                                               #
+	# ------------------------------------------------------------------ #
+	for (employee, attendance_date), logs in groups.items():
+		try:
+			# Skip if an attendance record already exists for this employee + date
+			existing = frappe.db.exists(
+				"Attendance",
+				{"employee": employee, "attendance_date": attendance_date},
+			)
+			if existing:
+				skipped.append(
+					{
+						"employee": employee,
+						"attendance_date": str(attendance_date),
+						"reason": f"Attendance already exists: {existing}",
+					}
+				)
+				continue
+
+			# ---------------------------------------------------------- #
+			# 3a. Calculate working hours from this day's checkins        #
+			# ---------------------------------------------------------- #
+			sorted_logs = sorted(logs, key=lambda x: get_datetime(x["time"]))
+
+			in_time = None
+			out_time = None
+			working_hours = 0.0
+
+			# First IN log and last OUT log (if log_type is recorded)
+			in_logs = [l for l in sorted_logs if (l.get("log_type") or "").upper() == "IN"]
+			out_logs = [l for l in sorted_logs if (l.get("log_type") or "").upper() == "OUT"]
+
+			if in_logs:
+				in_time = get_datetime(in_logs[0]["time"])
+			if out_logs:
+				out_time = get_datetime(out_logs[-1]["time"])
+
+			# Fallback: if no typed logs, use first and last timestamps
+			if not in_time:
+				in_time = get_datetime(sorted_logs[0]["time"])
+			if not out_time and len(sorted_logs) >= 2:
+				out_time = get_datetime(sorted_logs[-1]["time"])
+
+			if in_time and out_time and out_time > in_time:
+				working_hours = round((out_time - in_time).total_seconds() / 3600, 2)
+
+			# ---------------------------------------------------------- #
+			# 3b. Create DRAFT attendance (docstatus=0)                   #
+			# ---------------------------------------------------------- #
+			attendance = frappe.new_doc("Attendance")
+			attendance.update(
+				{
+					"doctype": "Attendance",
+					"employee": employee,
+					"attendance_date": attendance_date,
+					"status": "Present",
+					"working_hours": working_hours,
+					"in_time": in_time,
+					"out_time": out_time,
+					# No shift — these are off-shift checkins
+				}
+			)
+			# Insert without submitting → docstatus stays 0 (Draft)
+			attendance.insert(ignore_permissions=True)
+
+			# ---------------------------------------------------------- #
+			# 3c. Link all checkins for the day to this attendance        #
+			# ---------------------------------------------------------- #
+			log_names = [l["name"] for l in logs]
+			update_attendance_in_checkins(log_names, attendance.name)
+
+			created.append(
+				{
+					"attendance": attendance.name,
+					"employee": employee,
+					"attendance_date": str(attendance_date),
+					"working_hours": working_hours,
+					"checkins": log_names,
+				}
+			)
+
+		except Exception:
+			errors.append(
+				{
+					"employee": employee,
+					"attendance_date": str(attendance_date),
+					"error": frappe.get_traceback(),
+				}
+			)
+			frappe.log_error(
+				frappe.get_traceback(),
+				f"Off-shift draft attendance failed: {employee} / {attendance_date}",
+			)
+
+	frappe.db.commit()
+
+	frappe.msgprint(
+			_(f"Created - {created}, Skipped - {skipped}, Errors - {errors}"), alert=True, indicator="blue"
+		)
+
+	return {"created": created, "skipped": skipped, "errors": errors}
 
 def mark_attendance_and_link_log(
 	logs,

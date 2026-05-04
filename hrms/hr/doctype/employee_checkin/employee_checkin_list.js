@@ -27,5 +27,16 @@ frappe.listview_settings["Employee Checkin"] = {
 				},
 			});
 		});
+		
+		listview.page.add_action_item(__("Create Attendance"), () => {
+			const checkins = listview.get_checked_items().map((checkin) => checkin.name);
+			frappe.call({
+				method: "hrms.hr.doctype.employee_checkin.employee_checkin.create_draft_attendance_for_offshift_checkins",
+				freeze: true,
+				args: {
+					checkins,
+				},
+			});
+		});
 	},
 };
