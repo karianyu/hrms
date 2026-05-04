@@ -334,7 +334,7 @@ def create_draft_attendance_for_offshift_checkins(checkins: list[str] | str | No
 	# 1. Fetch candidate checkin records                                   #
 	# ------------------------------------------------------------------ #
 	filters = {
-		"offshift": 1,
+		# "offshift": 1,
 		"attendance": ("is", "not set"),
 		"skip_auto_attendance": 0,
 	}
@@ -462,9 +462,6 @@ def create_draft_attendance_for_offshift_checkins(checkins: list[str] | str | No
 
 	frappe.db.commit()
 
-	frappe.msgprint(
-			_(f"Created - {created}, Skipped - {skipped}, Errors - {errors}"), alert=True, indicator="blue"
-		)
 
 	return {"created": created, "skipped": skipped, "errors": errors}
 
