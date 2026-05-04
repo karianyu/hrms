@@ -334,7 +334,7 @@ def create_draft_attendance_for_offshift_checkins(checkins: list[str] | str | No
 	# 1. Fetch candidate checkin records                                   #
 	# ------------------------------------------------------------------ #
 	filters = {
-		# "offshift": 1,
+		"offshift": 1,
 		"attendance": ("is", "not set"),
 		"skip_auto_attendance": 0,
 	}
@@ -413,7 +413,14 @@ def create_draft_attendance_for_offshift_checkins(checkins: list[str] | str | No
 				working_hours = round((out_time - in_time).total_seconds() / 3600, 2)
 
 			# ---------------------------------------------------------- #
-			# 3b. Create DRAFT attendance (docstatus=0)                   #
+			# 3b. Determine attendance status                             #
+			# A single checkin for the day means we can't confirm a full  #
+			# working day, so mark as Half Day instead of Present.        #
+			# ---------------------------------------------------------- #
+			attendance_status = "Half Day" if len(sorted_logs) == 1 else "Present"
+
+			# ---------------------------------------------------------- #
+			# 3c. Create DRAFT attendance (docstatus=0)                   #
 			# ---------------------------------------------------------- #
 			attendance = frappe.new_doc("Attendance")
 			attendance.update(
@@ -421,7 +428,7 @@ def create_draft_attendance_for_offshift_checkins(checkins: list[str] | str | No
 					"doctype": "Attendance",
 					"employee": employee,
 					"attendance_date": attendance_date,
-					"status": "Present",
+					"status": attendance_status,
 					"working_hours": working_hours,
 					"in_time": in_time,
 					"out_time": out_time,
@@ -442,6 +449,7 @@ def create_draft_attendance_for_offshift_checkins(checkins: list[str] | str | No
 					"attendance": attendance.name,
 					"employee": employee,
 					"attendance_date": str(attendance_date),
+					"status": attendance_status,
 					"working_hours": working_hours,
 					"checkins": log_names,
 				}
