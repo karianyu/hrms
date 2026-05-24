@@ -5,7 +5,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import cint, get_datetime
+from frappe.utils import add_to_date, cint, get_datetime, now_datetime
 
 from hrms.hr.doctype.shift_assignment.shift_assignment import get_actual_start_end_datetime_of_shift
 from hrms.hr.utils import (
@@ -199,6 +199,26 @@ def bulk_fetch_shift(checkins: list[str] | str) -> None:
 
 from datetime import datetime, timedelta
 from typing import Dict, Any
+
+
+def hourly_fetch_shift_for_recent_checkins(hours: int = 2):
+	"""Scheduled hourly job: re-evaluate shifts for checkins logged in the last `hours` hours.
+
+	Picks up Employee Checkins modified within the window and runs them through the
+	custom `get_actual_shift` logic (via `bulk_shift_monthly_fetch`), which infers the
+	Day/Night shift, creates/cancels Shift Assignments, and re-fetches the shift.
+	"""
+	cutoff = add_to_date(now_datetime(), hours=-hours)
+	recent_checkins = frappe.get_all(
+		"Employee Checkin",
+		filters={"modified": (">=", cutoff)},
+		pluck="name",
+		order_by="time asc",
+	)
+	if not recent_checkins:
+		return
+
+	bulk_shift_monthly_fetch(recent_checkins)
 
 
 @frappe.whitelist()
